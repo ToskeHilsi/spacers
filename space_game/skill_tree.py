@@ -39,6 +39,7 @@ class Skill:
     spread_shot:         bool  = False
     ricochet:            bool  = False
     dual_missile:        bool  = False
+    warp_windup_bonus:   float = 0.0   # reduces warp windup time (seconds)
     # Prestige-only stats
     bullet_speed_mult:   float = 1.0   # multiply bullet speed
     damage_mult:         float = 1.0   # multiply all damage
@@ -128,7 +129,7 @@ _E = [
     Skill("boost2",      "Nitro",           "Boost CD -0.7s",                   "engine",23,2,_c(2),["boost_tk"],boost_cd_bonus=0.7),
     Skill("boost_pow",   "Boost Power",     "+28 speed, stronger boost",        "engine",25,2,_c(2),["boost_tk"],speed_bonus=28),
     Skill("engine2",     "Hyperdrive",      "+95 max speed",                    "engine",18,3,_c(3),["engine1"],speed_bonus=95),
-    Skill("warp",        "Warp Drive",      "Short warp dash (F)",              "engine",20,3,_c(3),["drift"],enables_warp=True),
+    Skill("warp",        "Warp Drive",      "Ram-dash (F): 2s windup then charge","engine",20,3,_c(3),["drift"],enables_warp=True),
     Skill("boost3",      "Overclock",       "Boost CD -1.0s",                   "engine",22,3,_c(3),["boost2"],boost_cd_bonus=1.0),
     Skill("phase",       "Phase Drive",     "+75 speed & +40 shield",           "engine",24,3,_c(3),["boost_pow"],speed_bonus=75,shield_bonus=40),
     Skill("slipstream",  "Slipstream",      "+55 speed",                        "engine",26,3,_c(3),["boost_pow"],speed_bonus=55),
@@ -137,14 +138,14 @@ _E = [
     Skill("boost4",      "Flash Boost",     "Boost CD -1.0s",                   "engine",22,4,_c(4),["boost3"],boost_cd_bonus=1.0),
     Skill("evasion",     "Evasion Protocol","+65 speed",                        "engine",25,4,_c(4),["phase","slipstream"],speed_bonus=65),
     Skill("no_limit",    "Limiter Off",     "+190 speed cap",                   "engine",19,5,_c(5),["engine3"],speed_bonus=190),
-    Skill("ghost",       "Ghost Protocol",  "Stealth lasts longer",             "engine",21,5,_c(5),["stealth"],enables_stealth=True),
+    Skill("ghost",       "Ghost Protocol",  "Stealth lasts longer, warp -0.5s windup","engine",21,5,_c(5),["stealth"],enables_stealth=True,warp_windup_bonus=0.5),
     Skill("boost5",      "Perma-Boost",     "Boost CD -1.0s",                   "engine",22,5,_c(5),["boost4"],boost_cd_bonus=1.0),
     Skill("blink",       "Blink Drive",     "Boost CD -1.0s, +55 speed",        "engine",25,5,_c(5),["evasion"],boost_cd_bonus=1.0,speed_bonus=55),
     Skill("lightspeed",  "Light Speed",     "+230 speed, near-instant boost",   "engine",19,6,_c(6),["no_limit"],speed_bonus=230,boost_cd_bonus=1.0),
     Skill("phantom",     "Phantom Ship",    "Stealth+speed+shield",             "engine",21,6,_c(6),["ghost","boost5"],enables_stealth=True,speed_bonus=85,shield_bonus=35),
-    Skill("transcend",   "Transcendence",   "Max speed+stealth+warp",           "engine",20,7,_c(7),["lightspeed","phantom"],speed_bonus=160,enables_stealth=True,enables_warp=True,boost_cd_bonus=1.0),
+    Skill("transcend",   "Transcendence",   "Max speed+stealth+warp, -0.5s windup","engine",20,7,_c(7),["lightspeed","phantom"],speed_bonus=160,enables_stealth=True,enables_warp=True,boost_cd_bonus=1.0,warp_windup_bonus=0.5),
     Skill("blink2",      "Quantum Blink",   "Boost instant, +110 speed",        "engine",24,7,_c(7),["blink"],boost_cd_bonus=1.5,speed_bonus=110),
-    Skill("ascension",   "Ascension Drive", "All engine perks maxed",           "engine",22,8,_c(8),["transcend","blink2"],speed_bonus=210,boost_cd_bonus=2.0,enables_stealth=True,enables_warp=True,shield_bonus=65),
+    Skill("ascension",   "Ascension Drive", "All engine perks maxed, warp -0.5s windup","engine",22,8,_c(8),["transcend","blink2"],speed_bonus=210,boost_cd_bonus=2.0,enables_stealth=True,enables_warp=True,shield_bonus=65,warp_windup_bonus=0.5),
 ]
 
 # ─── PRESTIGE WEAPONS  cols 0-8 ──────────────────────────────────────────────
@@ -189,7 +190,7 @@ _PE = [
     Skill("pe_blink",    "Void Blink",      "Boost CD 0.3s (near-instant)",     "p_engine",22,2,_pc(2),["pe_root"],is_prestige=True,boost_cd_bonus=2.5),
     Skill("pe_speed2",   "Lightspeed Core", "+500 max speed",                   "p_engine",24,2,_pc(2),["pe_speed"],is_prestige=True,speed_bonus=500),
     Skill("pe_invuln2",  "Temporal Armor",  "Invuln on boost, +200 speed",      "p_engine",20,3,_pc(3),["pe_timeslow"],is_prestige=True,invuln_on_boost=True,speed_bonus=200),
-    Skill("pe_warp",     "Void Warp",       "Warp + stealth + blink",           "p_engine",22,3,_pc(3),["pe_blink"],is_prestige=True,enables_warp=True,enables_stealth=True,boost_cd_bonus=1.5),
+    Skill("pe_warp",     "Void Warp",       "Warp instant windup + stealth + blink","p_engine",22,3,_pc(3),["pe_blink"],is_prestige=True,enables_warp=True,enables_stealth=True,boost_cd_bonus=1.5,warp_windup_bonus=2.0),
     Skill("pe_speed3",   "Tachyon Engine",  "+700 max speed",                   "p_engine",24,3,_pc(3),["pe_speed2"],is_prestige=True,speed_bonus=700),
     Skill("pe_matrix",   "Bullet Time",     "Time slow + invuln on boost",      "p_engine",21,4,_pc(4),["pe_invuln2","pe_warp"],is_prestige=True,time_slow=True,invuln_on_boost=True,boost_cd_bonus=1.0),
     Skill("pe_god",      "Singularity",     "+1000 speed, instant boost, phase","p_engine",23,4,_pc(4),["pe_speed3","pe_matrix"],is_prestige=True,speed_bonus=1000,boost_cd_bonus=3.0,invuln_on_boost=True,time_slow=True,enables_warp=True,enables_stealth=True),
@@ -287,6 +288,7 @@ class SkillTreeManager:
             "ricochet": False,          "warp": False,
             "stealth": False,           "reflect_chance": 0.0,
             "dual_missile": False,
+            "warp_windup_reduction": 0.0,
             # Prestige
             "bullet_speed_mult": 1.0,   "damage_mult": 1.0,
             "xp_mult": 1.0,             "invuln_on_boost": False,
@@ -315,7 +317,8 @@ class SkillTreeManager:
             if sk.ricochet:           stats["ricochet"]        = True
             if sk.enables_warp:       stats["warp"]            = True
             if sk.enables_stealth:    stats["stealth"]         = True
-            if sk.dual_missile:       stats["dual_missile"]    = True
+            if sk.dual_missile:       stats["dual_missile"]          = True
+            stats["warp_windup_reduction"] += sk.warp_windup_bonus
             if sk.invuln_on_boost:    stats["invuln_on_boost"] = True
             if sk.auto_missile:       stats["auto_missile"]    = True
             if sk.chain_lightning:    stats["chain_lightning"] = True

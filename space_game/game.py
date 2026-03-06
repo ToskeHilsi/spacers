@@ -39,6 +39,7 @@ class Game:
         self._cam_x = float(-sw // 2)
         self._cam_y = float(-sh // 2)
         self._reveal_timer = 0.0
+        self._warp_charge_t = 0.0
         self._go_font    = pygame.font.SysFont("monospace", 48, bold=True)
         self._go_sm_font = pygame.font.SysFont("monospace", 20)
 
@@ -73,8 +74,11 @@ class Game:
             if self.player.try_boost():
                 self.hud.add_message("BOOST!", 0.5, (100, 220, 255))
         elif k == pygame.K_f:
-            if self.player.try_warp():
-                self.hud.add_message("WARP!", 0.6, (100, 200, 255))
+            if self.player.is_warp_windup:
+                self.player.cancel_warp_windup()
+                self.hud.add_message("Warp cancelled", 0.8, (150, 150, 255))
+            elif self.player.try_warp():
+                self.hud.add_message("WARP CHARGING...", 0.6, (100, 200, 255))
         elif k == pygame.K_c:
             if self.player.try_stealth():
                 self.hud.add_message("STEALTH ENGAGED", 1.0, (150, 255, 150))
@@ -186,6 +190,58 @@ class Game:
             asteroid.update(dt)
         for dn in self.world.dense_nebulae:
             dn.update(dt)
+
+        # ── Warp charge: track timer and hit enemies ──────────────────────
+        if self.player.is_warp_charging:
+            if not hasattr(self, '_warp_charge_t'):
+                self._warp_charge_t = 0.0
+            self._warp_charge_t += dt
+            # Hit any enemy we overlap during the charge
+            pr = self.player.rect
+            warp_dmg = self.player.damage * self.player.WARP_DAMAGE_MULT
+            for enemy in list(self.world.enemies):
+                if enemy.alive and pr.colliderect(enemy.rect):
+                    enemy.take_damage(warp_dmg)
+                    self.world.spawn_explosion(enemy.x, enemy.y)
+                    if not enemy.alive:
+                        self._on_enemy_killed(enemy)
+            # End charge after 0.45s
+            if self._warp_charge_t >= 0.45:
+                self._warp_charge_t = 0.0
+                self.player._warp_state = "idle"
+                self.player._warp_cd = self.player.WARP_CD
+                # Bleed velocity so player doesn't stop dead
+                self.player.vx = self.player._warp_dx * self.player.max_speed * 0.5
+                self.player.vy = self.player._warp_dy * self.player.max_speed * 0.5
+                self.hud.add_message("WARP!", 0.7, (100, 200, 255))
+        else:
+            self._warp_charge_t = 0.0
+
+        # ── Warp HUD: show windup countdown ──────────────────────────────
+        if self.player.is_warp_windup:
+            t = self.player._warp_windup
+            self.hud.add_message(f"WARP CHARGING  {t:.1f}s", 0.05, (100, 180, 255))
+
+        # ── Asteroid–player solid collision ───────────────────────────────
+        for ast in self.world.asteroids:
+            dx = self.player.x - ast.x
+            dy = self.player.y - ast.y
+            dist = math.hypot(dx, dy)
+            min_dist = ast.radius + 18   # 18 ≈ player ship half-width
+            if dist < min_dist and dist > 0:
+                # Push player out
+                nx, ny = dx / dist, dy / dist
+                overlap = min_dist - dist
+                self.player.x += nx * overlap
+                self.player.y += ny * overlap
+                # Cancel velocity into asteroid
+                dot = self.player.vx * nx + self.player.vy * ny
+                if dot < 0:
+                    self.player.vx -= dot * nx
+                    self.player.vy -= dot * ny
+                # Warp charge hits asteroid — end charge early
+                if self.player.is_warp_charging:
+                    self._warp_charge_t = 999.0
 
         # Nebula stealth — player is hidden if inside a nebula OR using stealth skill
         # Track a "revealed" timer: firing cancels nebula cover and breaks stealth skill
@@ -396,6 +452,7 @@ class Game:
         self._cam_x = float(-sw // 2)
         self._cam_y = float(-sh // 2)
         self._reveal_timer = 0.0
+        self._warp_charge_t = 0.0
         self.world.update_chunks(self.player.x, self.player.y)
         self.hud.add_message("RESPAWNED — skills preserved", 3.0, (100, 255, 100))
 

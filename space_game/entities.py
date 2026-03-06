@@ -32,8 +32,10 @@ class Player:
     BASE_FIRE_CD    = 0.18
     BASE_DAMAGE     = 15
     INVINCIBLE_TIME = 0.8
-    WARP_DIST       = 600
-    WARP_CD         = 3.5
+    WARP_WINDUP     = 2.0     # base windup seconds (reduced by skills)
+    WARP_SPEED      = 1800.0  # base charge speed (px/s), scales with max_speed
+    WARP_CD         = 4.0
+    WARP_DAMAGE_MULT = 2.5    # damage multiplier vs enemies hit during charge
     STEALTH_DUR     = 4.0
     STEALTH_CD      = 8.0
     MISSILE_CD      = 1.5
@@ -62,6 +64,11 @@ class Player:
         self._fire_cd     = 0.0
         self._inv_timer   = 0.0
         self._warp_cd     = 0.0
+        self._warp_state  = "idle"    # "idle" | "windup" | "charging"
+        self._warp_windup = 0.0       # countdown timer during windup
+        self._warp_dx     = 0.0       # locked direction during charge
+        self._warp_dy     = 0.0
+        self._warp_pulse  = 0.0       # animation pulse timer
         self._stealth_cd  = 0.0
         self._stealth_t   = 0.0
         self._missile_cd  = 0.0
@@ -96,6 +103,7 @@ class Player:
         self.has_stealth  = s["stealth"]
         self.has_dual_missile = s["dual_missile"]
         self.boost_cd_base = max(0.4, self.BOOST_CD - s["boost_cd_reduction"])
+        self.warp_windup_reduction = s.get("warp_windup_reduction", 0.0)
 
     def refresh_skills(self, skill_stats):
         self.skill_stats = skill_stats
@@ -148,13 +156,30 @@ class Player:
             self._level_up_pending = True
 
     def try_warp(self):
-        if self.has_warp and self._warp_cd <= 0:
-            dx, dy = angle_to_vec(self.angle)
-            self.x += dx * self.WARP_DIST
-            self.y += dy * self.WARP_DIST
-            self._warp_cd = self.WARP_CD
+        """Begin warp windup. Returns True if started."""
+        if not self.has_warp or self._warp_cd > 0 or self._warp_state != "idle":
+            return False
+        windup = max(0.1, self.WARP_WINDUP - self.warp_windup_reduction)
+        self._warp_windup = windup
+        self._warp_state  = "windup"
+        self._warp_pulse  = 0.0
+        return True
+
+    def cancel_warp_windup(self):
+        """Cancel windup only (cannot cancel once charging)."""
+        if self._warp_state == "windup":
+            self._warp_state = "idle"
+            self._warp_windup = 0.0
             return True
         return False
+
+    @property
+    def is_warp_charging(self):
+        return self._warp_state == "charging"
+
+    @property
+    def is_warp_windup(self):
+        return self._warp_state == "windup"
 
     def try_stealth(self):
         if self.has_stealth and self._stealth_cd <= 0 and not self.is_stealthed:
@@ -176,6 +201,52 @@ class Player:
         return True
 
     def update(self, dt, keys):
+        self._warp_pulse += dt * 6.0
+        # Always tick these regardless of warp state
+        self._fire_cd    = max(0, self._fire_cd    - dt)
+        self._inv_timer  = max(0, self._inv_timer  - dt)
+        self._warp_cd    = max(0, self._warp_cd    - dt)
+        self._stealth_cd = max(0, self._stealth_cd - dt)
+        self._missile_cd = max(0, self._missile_cd - dt)
+        self._laser_cd   = max(0, self._laser_cd   - dt)
+        self._boost_cd   = max(0, self._boost_cd   - dt)
+        if self.regen > 0:
+            self.hp = min(self.max_hp, self.hp + self.regen * dt)
+        if self.max_shield > 0 and self.shield < self.max_shield:
+            self._shield_dmg_cd -= dt
+            if self._shield_dmg_cd <= 0:
+                self.shield = min(self.max_shield, self.shield + 10 * dt)
+        if self.is_stealthed:
+            self._stealth_t -= dt
+            if self._stealth_t <= 0:
+                self.is_stealthed = False
+        if self.firing_laser:
+            self._laser_t -= dt
+            if self._laser_t <= 0:
+                self.firing_laser = False
+        if self._ice_t > 0:
+            self._ice_t -= dt
+            if self._ice_t <= 0:
+                self.is_boosting = False
+
+        # ── Warp state machine ────────────────────────────────────────────
+        if self._warp_state == "windup":
+            # Frozen: no steering, bleed to stop
+            self.vx *= 0.85 ** (dt * 60)
+            self.vy *= 0.85 ** (dt * 60)
+            self._warp_windup -= dt
+            if self._warp_windup <= 0:
+                self._warp_dx, self._warp_dy = angle_to_vec(self.angle)
+                self._warp_state = "charging"
+            return
+
+        elif self._warp_state == "charging":
+            spd = self.WARP_SPEED + self.max_speed * 1.5
+            self.x += self._warp_dx * spd * dt
+            self.y += self._warp_dy * spd * dt
+            return
+
+        # ── Normal movement ───────────────────────────────────────────────
         if keys[pygame.K_LEFT]  or keys[pygame.K_a]:
             self.angle -= 180 * dt
         if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
@@ -198,33 +269,6 @@ class Player:
 
         self.x += self.vx * dt
         self.y += self.vy * dt
-
-        self._fire_cd    = max(0, self._fire_cd    - dt)
-        self._inv_timer  = max(0, self._inv_timer  - dt)
-        self._warp_cd    = max(0, self._warp_cd    - dt)
-        self._stealth_cd = max(0, self._stealth_cd - dt)
-        self._missile_cd = max(0, self._missile_cd - dt)
-        self._laser_cd   = max(0, self._laser_cd   - dt)
-        self._boost_cd   = max(0, self._boost_cd   - dt)
-
-        if self._ice_t > 0:
-            self._ice_t -= dt
-            if self._ice_t <= 0:
-                self.is_boosting = False
-        if self.is_stealthed:
-            self._stealth_t -= dt
-            if self._stealth_t <= 0:
-                self.is_stealthed = False
-        if self.firing_laser:
-            self._laser_t -= dt
-            if self._laser_t <= 0:
-                self.firing_laser = False
-        if self.regen > 0:
-            self.hp = min(self.max_hp, self.hp + self.regen * dt)
-        if self.max_shield > 0 and self.shield < self.max_shield:
-            self._shield_dmg_cd -= dt
-            if self._shield_dmg_cd <= 0:
-                self.shield = min(self.max_shield, self.shield + 10 * dt)
 
     def try_fire(self):
         if self._fire_cd > 0:
@@ -291,7 +335,51 @@ class Player:
         sx = self.x - cam_x - rotated.get_width()  // 2
         sy = self.y - cam_y - rotated.get_height() // 2
         surf.blit(rotated, (sx, sy))
-        if not self.is_stealthed:
+
+        # Warp windup — pulsing rings converging toward ship
+        if self._warp_state == "windup":
+            windup_base = max(0.1, self.WARP_WINDUP - self.warp_windup_reduction)
+            progress = 1.0 - (self._warp_windup / windup_base)
+            for ring in range(3):
+                phase = (self._warp_pulse * 0.7 + ring * 0.6) % 1.0
+                r = int(80 * (1.0 - phase) + 10)
+                a = int(220 * (1.0 - phase) * progress)
+                if a > 0 and r > 2:
+                    rs = pygame.Surface((r*2+4, r*2+4), pygame.SRCALPHA)
+                    col = (100, 180, 255, a)
+                    pygame.draw.circle(rs, col, (r+2, r+2), r, 3)
+                    surf.blit(rs, (int(self.x - cam_x) - r - 2,
+                                   int(self.y - cam_y) - r - 2))
+            # Direction arrow showing locked warp path
+            dx, dy = angle_to_vec(self.angle)
+            arrow_len = 60 + int(40 * math.sin(self._warp_pulse))
+            ex = int(self.x - cam_x + dx * arrow_len)
+            ey = int(self.y - cam_y + dy * arrow_len)
+            pygame.draw.line(surf, (100, 200, 255),
+                             (int(self.x - cam_x), int(self.y - cam_y)), (ex, ey), 2)
+            tip_size = 8
+            perp = (-dy, dx)
+            pygame.draw.polygon(surf, (150, 220, 255), [
+                (ex, ey),
+                (int(ex - dx*tip_size + perp[0]*tip_size*0.5),
+                 int(ey - dy*tip_size + perp[1]*tip_size*0.5)),
+                (int(ex - dx*tip_size - perp[0]*tip_size*0.5),
+                 int(ey - dy*tip_size - perp[1]*tip_size*0.5)),
+            ])
+
+        # Warp charge — bright trail
+        elif self._warp_state == "charging":
+            spd = self.WARP_SPEED + self.max_speed * 1.5
+            for i in range(5):
+                tx = int(self.x - cam_x - self._warp_dx * i * 18)
+                ty = int(self.y - cam_y - self._warp_dy * i * 18)
+                r  = max(2, 12 - i * 2)
+                a  = max(0, 220 - i * 45)
+                ts = pygame.Surface((r*2+2, r*2+2), pygame.SRCALPHA)
+                pygame.draw.circle(ts, (100, 200, 255, a), (r+1, r+1), r)
+                surf.blit(ts, (tx - r - 1, ty - r - 1))
+
+        elif not self.is_stealthed:
             fx = self.x - cam_x - math.cos(math.radians(self.angle)) * 22
             fy = self.y - cam_y - math.sin(math.radians(self.angle)) * 22
             fs = pygame.Surface((10, 14), pygame.SRCALPHA)
@@ -619,8 +707,9 @@ class Enemy:
         self._set_velocity(nx * self.SPEED * 0.5, ny * self.SPEED * 0.5)
 
     def draw(self, surf, cam_x, cam_y):
-        img = self.sprite_mgr.get(self.sprite_key)
-        alpha = 60 if self.is_hidden else 255
+        img    = self.sprite_mgr.get(self.sprite_key)
+        bar_w  = img.get_width()
+        alpha  = 0 if self.is_hidden else 255
         rotated = pygame.transform.rotate(img, -self.angle - 90)
         # Apply zone color tint
         if self.zone_tint and not self.is_hidden:
@@ -634,7 +723,6 @@ class Enemy:
         sy = self.y - cam_y - rotated.get_height() // 2
         surf.blit(rotated, (sx, sy))
         if not self.is_hidden:
-            bar_w = img.get_width()
             ratio = self.hp / self.max_hp
             bar_x = self.x - cam_x - bar_w // 2
             bar_y = self.y - cam_y - img.get_height() // 2 - 8
