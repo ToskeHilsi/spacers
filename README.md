@@ -1,0 +1,13 @@
+fixes needed:
+- enemy ships can still fly thru meteors
+- bosses dont match color of their zone
+- each individual missile from seeker swarm should target a different enemy unless only 1 enemy can be targeted
+- apocolypse upgrade does nothing
+- there should be distance upgrades for boost and warp
+- boost and warp speed isnt affected by the speed stat
+- the laser needs a major buff
+- boost and warp shouldnt stop abruptly, they should lose speed quickly but not immediately
+- you shouldnt be able to shoot while charging your warp
+- once you reach zone 8, there should be wormholes that take you to the opposite side of the map the spawn randomly and rarely
+- the player is told "Destroyed! +_ XP" but dont recieve any xp
+- there needs to be damage upgrades for warp
