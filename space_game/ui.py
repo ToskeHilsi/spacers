@@ -168,15 +168,19 @@ class HUD:
             if 0 <= wx < mm_size and 0 <= wy < mm_size:
                 pygame.draw.circle(mm_surf, (200, 160, 50), (wx, wy), 2)
 
-        # Boss dot — always clamped to minimap edge so it stays visible
-        if boss and boss.alive:
-            bx_raw = mm_size // 2 + int((boss.x - player.x) * mm_scale)
-            by_raw = mm_size // 2 + int((boss.y - player.y) * mm_scale)
+        # Boss dots — draw all alive bosses, required one is brighter
+        for b in world.bosses:
+            if not b.alive:
+                continue
+            bx_raw = mm_size // 2 + int((b.x - player.x) * mm_scale)
+            by_raw = mm_size // 2 + int((b.y - player.y) * mm_scale)
             bx_mm  = max(4, min(mm_size-4, bx_raw))
             by_mm  = max(4, min(mm_size-4, by_raw))
-            gcol   = [(255,180,40),(255,80,80),(120,80,255),(80,200,255)][boss._gimmick]
-            pygame.draw.circle(mm_surf, gcol,        (bx_mm, by_mm), 5)
-            pygame.draw.circle(mm_surf, (255,255,255),(bx_mm, by_mm), 5, 1)
+            gcol   = [(255,180,40),(255,80,80),(120,80,255),(80,200,255)][b._gimmick]
+            is_req = getattr(b, "_is_required", True)
+            size   = 5 if is_req else 3
+            pygame.draw.circle(mm_surf, gcol,         (bx_mm, by_mm), size)
+            pygame.draw.circle(mm_surf, (255,255,255),(bx_mm, by_mm), size, 1)
 
         # Player dot (on top of everything)
         pygame.draw.circle(mm_surf, (0, 220, 255), (mm_size // 2, mm_size // 2), 3)
